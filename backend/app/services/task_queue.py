@@ -38,15 +38,29 @@ class TaskQueueService(BaseModuleService):
         )
         return pending
 
-    def recycle_failed_dispatches(self) -> dict[str, Any]:
-        """回收派发失败的任务（已派发但被标记为待派发）。"""
+    def split_dispatch_recovery(self) -> dict[str, list[dict[str, Any]]]:
+        """按派发是否已由节点接手分类已派发任务。
+
+        已接手（登记了占用节点）：归属原节点，缺失的首条采集轨迹由发布
+        恢复补写，不在此回收；未接手（无占用节点）：交由队列回收任务。
+        """
         items, _ = self.list_entries(size=10000)
-        recycled = 0
-        for it in items:
-            if it.get("status") == "已派发" and not it.get("占用节点"):
-                self.run_action(it["id"], "回收任务")
-                recycled += 1
-        return {"ok": True, "recycled_count": recycled}
+        dispatched = [it for it in items if it.get("status") == "已派发"]
+        taken_over = [it for it in dispatched if str(it.get("占用节点") or "").strip()]
+        unclaimed = [it for it in dispatched if not str(it.get("占用节点") or "").strip()]
+        return {"taken_over": taken_over, "unclaimed": unclaimed}
+
+    def recycle_failed_dispatches(self) -> dict[str, Any]:
+        """回收已派发但无人接手的任务；节点已接手的任务仍归属原节点，不回收。"""
+        unclaimed = self.split_dispatch_recovery()["unclaimed"]
+        for it in unclaimed:
+            self.run_action(it["id"], "回收任务")
+        return {"ok": True, "recycled_count": len(unclaimed)}
+
+    # 常见近义命名，统一到同一份回收实现
+    reclaim_failed_dispatches = recycle_failed_dispatches
+    recover_failed_dispatches = recycle_failed_dispatches
+    reclaim_unclaimed_tasks = recycle_failed_dispatches
 
     def dispatch_to_node(self, task_id: int, node_code: str) -> dict[str, Any]:
         """将任务派发到指定节点。"""

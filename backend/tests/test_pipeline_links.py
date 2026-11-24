@@ -80,7 +80,7 @@ class TestPipelineLink1_PublishScheduleDispatch:
 
 
 class TestPipelineLink2_CollectLandHandoff:
-    """链路2: 文件归集校验→采集批次→字段映射→数据落库→交接包"""
+    """链路2: 文件归集校验→采集批次确认→字段映射落库→交接包"""
 
     def test_full_collect_land_handoff_chain(self):
         run_svc = service_for("flow_run")
